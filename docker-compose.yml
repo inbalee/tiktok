@@ -1,0 +1,10 @@
+services:
+  app:
+    build: .
+    ports:
+      - "5001:5001"
+    environment:
+      PORT: 5001
+      WEB_CONCURRENCY: 2
+      GUNICORN_TIMEOUT: 120
+    restart: unless-stopped
