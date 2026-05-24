@@ -3,6 +3,7 @@ import os
 
 import yaml
 from flask import Flask, jsonify, render_template, request
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from api_responses import api_error, api_success
 from request_queue import QueueFullError, QueueTimeoutError, get_request_queue
@@ -19,6 +20,7 @@ from tiktok_service import (
 )
 
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
 OPENAPI_PATH = Path(__file__).with_name("openapi.yaml")
 request_queue = get_request_queue()
 
@@ -26,6 +28,20 @@ request_queue = get_request_queue()
 def _queue_error_response(exc: Exception):
     retry_after = os.environ.get("QUEUE_RETRY_AFTER_SEC", "5")
     return api_error(str(exc), 503, {"Retry-After": retry_after})
+
+
+@app.after_request
+def add_cors_headers(response):
+    if request.path.startswith("/api/") or request.path == "/openapi.json":
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Accept, Content-Type"
+    return response
+
+
+@app.route("/api/<path:_path>", methods=["OPTIONS"])
+def api_options(_path: str):
+    return "", 204
 
 
 @app.route("/")
@@ -41,7 +57,15 @@ def docs():
 @app.route("/openapi.json")
 def openapi_spec():
     with OPENAPI_PATH.open(encoding="utf-8") as spec_file:
-        return jsonify(yaml.safe_load(spec_file))
+        spec = yaml.safe_load(spec_file)
+
+    spec["servers"] = [
+        {
+            "url": request.url_root.rstrip("/"),
+            "description": "Current server",
+        }
+    ]
+    return jsonify(spec)
 
 
 @app.route("/api/queue")

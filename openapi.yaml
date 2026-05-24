@@ -16,8 +16,8 @@ info:
   version: 1.0.0
 
 servers:
-  - url: http://127.0.0.1:5001
-    description: Local development
+  - url: /
+    description: Current server (resolved dynamically in /openapi.json)
 
 tags:
   - name: Users
