@@ -20,10 +20,16 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-Production stack with nginx on port 80:
+Production stack with nginx (default port 80):
 
 ```bash
 docker compose -f docker-compose.prod.yml up -d --build
+```
+
+On a shared EC2 host (e.g. alongside other apps on :5000), use a dedicated port:
+
+```bash
+TIKTOK_HTTP_PORT=5002 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
 ## EC2 deployment
@@ -34,7 +40,8 @@ docker compose -f docker-compose.prod.yml up -d --build
 - Instance type: `t3.small` or larger recommended
 - Security group inbound rules:
   - `22` SSH (your IP)
-  - `80` HTTP (0.0.0.0/0 or your IP)
+  - `80` HTTP if using default nginx port
+  - `5002` Custom TCP if sharing the host (see below)
 - Storage: 20 GB+
 
 Optional: paste `deploy/ec2-user-data.sh` into **User data** at launch to install Docker automatically.
@@ -62,19 +69,39 @@ export SSH_KEY=~/.ssh/your-key.pem
 bash deploy/deploy.sh
 ```
 
+**Shared EC2 (other Docker stacks already running):**
+```bash
+export EC2_HOST=YOUR_EC2_IP
+export SSH_KEY=~/.ssh/your-key.pem
+export TIKTOK_HTTP_PORT=5002
+bash deploy/deploy.sh
+```
+
 The script rsyncs the project, builds the image, and starts:
 
-- `app` on port 5001 (internal)
-- `nginx` on port 80 (public)
+- `app` on port 5001 (internal only — reached via nginx)
+- `nginx` on the public port (`80` by default, or `TIKTOK_HTTP_PORT`)
+
+### Shared host port layout
+
+| Service | Host port | URL |
+|---------|-----------|-----|
+| Telegram nginx | 5000 | `http://IP:5000/` |
+| TikTok nginx | 5002 (recommended) | `http://IP:5002/` |
+| Postgres / Redis | 5432 / 6379 | internal tools only |
+
+Internal container ports (e.g. `:5001` on multiple containers) do not conflict — only **published host ports** matter.
 
 ### 4. Verify
 
 ```bash
-curl http://YOUR_EC2_IP/openapi.json
-curl "http://YOUR_EC2_IP/api/search?q=dance"
+curl http://YOUR_EC2_IP/openapi.json          # if TIKTOK_HTTP_PORT=80
+curl http://YOUR_EC2_IP:5002/openapi.json     # if TIKTOK_HTTP_PORT=5002
 ```
 
-Open `http://YOUR_EC2_IP/` in a browser.
+Open in browser:
+- `http://YOUR_EC2_IP/` or `http://YOUR_EC2_IP:5002/` (via nginx)
+- Swagger at `/docs` on the same URL
 
 ## API
 

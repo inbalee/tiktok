@@ -1,3 +1,5 @@
+# Public URL is via nginx. On a shared EC2 host (e.g. alongside telegram on :5000),
+# set TIKTOK_HTTP_PORT=5002 and open that port in the security group.
 services:
   app:
     build: .
@@ -20,7 +22,7 @@ services:
   nginx:
     image: nginx:1.27-alpine
     ports:
-      - "80:80"
+      - "${TIKTOK_HTTP_PORT:-80}:80"
     volumes:
       - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
