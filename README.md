@@ -48,8 +48,14 @@ sudo bash deploy/ec2-setup.sh
 
 Log out and back in so Docker group membership applies.
 
-### 3. Deploy from your machine
+### 3. Deploy
 
+**Local (default):**
+```bash
+bash deploy/deploy.sh
+```
+
+**Remote EC2:**
 ```bash
 export EC2_HOST=YOUR_EC2_IP
 export SSH_KEY=~/.ssh/your-key.pem
