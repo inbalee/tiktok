@@ -1,0 +1,459 @@
+openapi: 3.0.3
+info:
+  title: TikTok Lookup API
+  description: |
+    JSON API for TikTok user profiles, keyword search, video metadata, and video comments.
+
+    All successful responses use:
+    ```json
+    { "success": true, "data": { ... } }
+    ```
+
+    All error responses use:
+    ```json
+    { "success": false, "error": "message" }
+    ```
+  version: 1.0.0
+
+servers:
+  - url: http://127.0.0.1:5001
+    description: Local development
+
+tags:
+  - name: Users
+    description: TikTok user profile lookup
+  - name: Search
+    description: Keyword search across users, videos, hashtags, and sounds
+  - name: Videos
+    description: Video metadata and comments
+
+paths:
+  /api/user/{username}:
+    get:
+      tags: [Users]
+      summary: Get user profile by username
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+          description: TikTok username (with or without @)
+      responses:
+        "200":
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessUserProfile"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/search:
+    get:
+      tags: [Search]
+      summary: Search by keyword
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Search keyword
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessSearchResults"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/video/metadata:
+    get:
+      tags: [Videos]
+      summary: Get video metadata by link or ID
+      parameters:
+        - name: url
+          in: query
+          required: true
+          schema:
+            type: string
+          description: TikTok video URL or numeric video ID
+      responses:
+        "200":
+          description: Video metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessVideoMetadata"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/video/{video_id}/comments:
+    get:
+      tags: [Videos]
+      summary: Get video comments
+      parameters:
+        - name: video_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: TikTok video ID or URL containing /video/{id}
+        - name: cursor
+          in: query
+          schema:
+            type: integer
+            default: 0
+          description: Pagination cursor
+        - name: count
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 50
+          description: Number of comments to return
+      responses:
+        "200":
+          description: Video comments
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessVideoComments"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+components:
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    BadGateway:
+      description: Upstream fetch error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    InternalError:
+      description: Unexpected server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [success, error]
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+          example: Resource not found
+
+    SuccessEnvelope:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+
+    SocialLink:
+      type: object
+      properties:
+        label:
+          type: string
+        url:
+          type: string
+
+    UserProfile:
+      type: object
+      properties:
+        user_id:
+          type: string
+        username:
+          type: string
+        nickname:
+          type: string
+        followers:
+          type: integer
+        following:
+          type: integer
+        likes:
+          type: integer
+        videos:
+          type: integer
+        biography:
+          type: string
+        verified:
+          type: boolean
+        sec_uid:
+          type: string
+        comment_setting:
+          type: integer
+        private_account:
+          type: boolean
+        region:
+          type: string
+        heart:
+          type: integer
+        digg_count:
+          type: integer
+        friend_count:
+          type: integer
+        profile_pic:
+          type: string
+        profile_url:
+          type: string
+        social_links:
+          type: array
+          items:
+            $ref: "#/components/schemas/SocialLink"
+
+    SuccessUserProfile:
+      allOf:
+        - $ref: "#/components/schemas/SuccessEnvelope"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/UserProfile"
+
+    SearchUser:
+      type: object
+      properties:
+        user_id:
+          type: string
+        username:
+          type: string
+        nickname:
+          type: string
+        biography:
+          type: string
+        profile_pic:
+          type: string
+        profile_url:
+          type: string
+        verified:
+          type: boolean
+        followers:
+          type: integer
+        following:
+          type: integer
+        likes:
+          type: integer
+        videos:
+          type: integer
+        heart:
+          type: integer
+        digg_count:
+          type: integer
+        sec_uid:
+          type: string
+
+    SearchVideo:
+      type: object
+      properties:
+        video_id:
+          type: string
+        title:
+          type: string
+        cover:
+          type: string
+        duration:
+          type: integer
+        play_count:
+          type: integer
+        likes:
+          type: integer
+        comment_count:
+          type: integer
+        share_count:
+          type: integer
+        username:
+          type: string
+        nickname:
+          type: string
+        author_avatar:
+          type: string
+        video_url:
+          type: string
+
+    SearchTag:
+      type: object
+      properties:
+        title:
+          type: string
+        views:
+          type: string
+        url:
+          type: string
+
+    SearchSound:
+      type: object
+      properties:
+        title:
+          type: string
+        videos:
+          type: string
+        url:
+          type: string
+
+    SearchResults:
+      type: object
+      properties:
+        keyword:
+          type: string
+        users:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchUser"
+        videos:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchVideo"
+        hashtags:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchTag"
+        sounds:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchSound"
+
+    SuccessSearchResults:
+      allOf:
+        - $ref: "#/components/schemas/SuccessEnvelope"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/SearchResults"
+
+    VideoMetadata:
+      type: object
+      properties:
+        video_id:
+          type: string
+        title:
+          type: string
+        cover:
+          type: string
+        duration:
+          type: integer
+        region:
+          type: string
+        play_count:
+          type: integer
+        likes:
+          type: integer
+        comment_count:
+          type: integer
+        share_count:
+          type: integer
+        download_count:
+          type: integer
+        collect_count:
+          type: integer
+        create_time:
+          type: integer
+        is_ad:
+          type: boolean
+        username:
+          type: string
+        nickname:
+          type: string
+        author_id:
+          type: string
+        author_avatar:
+          type: string
+        profile_url:
+          type: string
+        video_url:
+          type: string
+        music_title:
+          type: string
+        music_author:
+          type: string
+        music_duration:
+          type: integer
+        source_url:
+          type: string
+
+    SuccessVideoMetadata:
+      allOf:
+        - $ref: "#/components/schemas/SuccessEnvelope"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/VideoMetadata"
+
+    Comment:
+      type: object
+      properties:
+        comment_id:
+          type: string
+        username:
+          type: string
+        nickname:
+          type: string
+        text:
+          type: string
+        likes:
+          type: integer
+        reply_count:
+          type: integer
+        create_time:
+          type: integer
+        profile_url:
+          type: string
+
+    VideoComments:
+      type: object
+      properties:
+        video_id:
+          type: string
+        video_url:
+          type: string
+        total:
+          type: integer
+        cursor:
+          type: integer
+        has_more:
+          type: boolean
+        comments:
+          type: array
+          items:
+            $ref: "#/components/schemas/Comment"
+
+    SuccessVideoComments:
+      allOf:
+        - $ref: "#/components/schemas/SuccessEnvelope"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/VideoComments"
