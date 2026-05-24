@@ -13,7 +13,7 @@ RUN apt-get update \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app.py api_responses.py tiktok_service.py openapi.yaml gunicorn.conf.py ./
+COPY app.py api_responses.py request_queue.py tiktok_service.py openapi.yaml gunicorn.conf.py ./
 COPY templates/ templates/
 COPY static/ static/
 
