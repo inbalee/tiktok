@@ -26,8 +26,25 @@ tags:
     description: Keyword search across users, videos, hashtags, and sounds
   - name: Videos
     description: Video metadata and comments
+  - name: Queue
+    description: Request queue status
 
 paths:
+  /api/queue:
+    get:
+      tags: [Queue]
+      summary: Get request queue status
+      description: |
+        Outbound TikTok API calls are processed through an in-process queue to reduce
+        rate limiting. Use this endpoint to inspect pending and active work.
+      responses:
+        "200":
+          description: Queue statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessQueueStatus"
+
   /api/user/{username}:
     get:
       tags: [Users]
@@ -50,6 +67,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "502":
           $ref: "#/components/responses/BadGateway"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -75,6 +94,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "502":
           $ref: "#/components/responses/BadGateway"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -100,6 +121,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "502":
           $ref: "#/components/responses/BadGateway"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -138,6 +161,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "502":
           $ref: "#/components/responses/BadGateway"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -157,6 +182,17 @@ components:
             $ref: "#/components/schemas/ErrorResponse"
     InternalError:
       description: Unexpected server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ServiceUnavailable:
+      description: Request queue is full or timed out
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: Seconds to wait before retrying
       content:
         application/json:
           schema:
@@ -457,3 +493,27 @@ components:
           properties:
             data:
               $ref: "#/components/schemas/VideoComments"
+
+    QueueStatus:
+      type: object
+      properties:
+        pending:
+          type: integer
+        active:
+          type: integer
+        completed:
+          type: integer
+        workers:
+          type: integer
+        max_size:
+          type: integer
+        min_interval_sec:
+          type: number
+
+    SuccessQueueStatus:
+      allOf:
+        - $ref: "#/components/schemas/SuccessEnvelope"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/QueueStatus"

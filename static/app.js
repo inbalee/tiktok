@@ -10,7 +10,12 @@ function formatNumber(num) {
 async function parseApiResponse(res) {
   const body = await res.json();
   if (!res.ok || body.success === false) {
-    throw new Error(body.error || "Something went wrong.");
+    const message = body.error || "Something went wrong.";
+    if (res.status === 503) {
+      const retryAfter = Number(res.headers.get("Retry-After") || 5);
+      throw new Error(`${message} Retry in about ${retryAfter}s.`);
+    }
+    throw new Error(message);
   }
   return body.data ?? body;
 }
