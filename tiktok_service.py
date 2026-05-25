@@ -398,11 +398,127 @@ def get_video_comments(
     }
 
 
-def get_user_info(identifier: str, by_id: bool = False) -> dict:
-    """Fetch TikTok user profile data by username or user ID."""
-    if identifier.startswith("@"):
-        identifier = identifier[1:]
+def _user_not_found_error() -> TikTokUserNotFoundError:
+    return TikTokUserNotFoundError(
+        "User not found. Check the username and try again."
+    )
 
+
+def _build_user_profile(
+    *,
+    user_id: str,
+    username: str,
+    nickname: str,
+    followers: int,
+    following: int,
+    likes: int,
+    videos: int,
+    biography: str,
+    verified: bool,
+    sec_uid: str,
+    comment_setting: int,
+    private_account: bool,
+    region: str,
+    heart: int,
+    digg_count: int,
+    friend_count: int,
+    profile_pic: str,
+    social_links: list[dict[str, str]],
+) -> dict:
+    return {
+        "user_id": user_id,
+        "username": username,
+        "nickname": nickname,
+        "followers": followers,
+        "following": following,
+        "likes": likes,
+        "videos": videos,
+        "biography": biography,
+        "verified": verified,
+        "sec_uid": sec_uid,
+        "comment_setting": comment_setting,
+        "private_account": private_account,
+        "region": region,
+        "heart": heart,
+        "digg_count": digg_count,
+        "friend_count": friend_count,
+        "profile_pic": profile_pic,
+        "profile_url": f"https://www.tiktok.com/@{username}",
+        "social_links": social_links,
+    }
+
+
+def _get_user_info_via_tikwm(username: str) -> dict:
+    try:
+        response = requests.get(
+            "https://www.tikwm.com/api/user/info",
+            params={"unique_id": username},
+            headers=_headers(),
+            timeout=30,
+        )
+    except requests.RequestException as exc:
+        raise TikTokFetchError(f"Network error: {exc}") from exc
+
+    if response.status_code != 200:
+        raise TikTokFetchError(
+            f"Unable to fetch profile (HTTP {response.status_code})"
+        )
+
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise TikTokFetchError("Invalid user profile response") from exc
+
+    if payload.get("code") == -1 and "limit" in payload.get("msg", "").lower():
+        raise TikTokFetchError("Rate limited. Please wait a moment and try again.")
+
+    msg = (payload.get("msg") or "").lower()
+    if payload.get("code") != 0:
+        if "invalid" in msg or "not found" in msg:
+            raise _user_not_found_error()
+        raise TikTokFetchError(payload.get("msg") or "Failed to fetch user profile")
+
+    data = payload.get("data") or {}
+    user = data.get("user") or {}
+    stats = data.get("stats") or {}
+    unique_id = user.get("uniqueId") or username
+    if not unique_id:
+        raise _user_not_found_error()
+
+    bio = (user.get("signature") or "").replace("\\n", "\n")
+    social_links = _extract_social_links("", bio)
+    bio_link = user.get("bioLink") or {}
+    if isinstance(bio_link, dict) and bio_link.get("link"):
+        link = bio_link["link"].replace("\\u002F", "/")
+        if not any(item["url"] == link for item in social_links):
+            social_links.append({"label": link, "url": link})
+
+    comment_setting = user.get("commentSetting")
+    return _build_user_profile(
+        user_id=str(user.get("id", "")),
+        username=unique_id,
+        nickname=user.get("nickname", ""),
+        followers=_parse_int(stats.get("followerCount")),
+        following=_parse_int(stats.get("followingCount")),
+        likes=_parse_int(stats.get("heartCount")),
+        videos=_parse_int(stats.get("videoCount")),
+        biography=bio,
+        verified=bool(user.get("verified")),
+        sec_uid=user.get("secUid", ""),
+        comment_setting=(
+            _parse_int(comment_setting) if comment_setting is not None else 0
+        ),
+        private_account=bool(user.get("privateAccount")),
+        region="",
+        heart=_parse_int(stats.get("heart")),
+        digg_count=_parse_int(stats.get("diggCount")),
+        friend_count=0,
+        profile_pic=(user.get("avatarLarger") or "").replace("\\u002F", "/"),
+        social_links=social_links,
+    )
+
+
+def _get_user_info_via_scrape(identifier: str) -> dict:
     url = f"https://www.tiktok.com/@{identifier}"
     headers = _headers()
 
@@ -449,37 +565,50 @@ def get_user_info(identifier: str, by_id: bool = False) -> dict:
         raw[key] = match.group(1) if match else ""
 
     if not raw.get("unique_id"):
-        raise TikTokUserNotFoundError(
-            "User not found. Check the username and try again."
-        )
+        raise _user_not_found_error()
 
     profile_pic = raw.get("profile_pic", "").replace("\\u002F", "/")
     bio = raw.get("signature", "").replace("\\n", "\n")
     social_links = _extract_social_links(html_content, bio)
 
-    return {
-        "user_id": raw["user_id"],
-        "username": raw["unique_id"],
-        "nickname": raw["nickname"],
-        "followers": _parse_int(raw["followers"]),
-        "following": _parse_int(raw["following"]),
-        "likes": _parse_int(raw["likes"]),
-        "videos": _parse_int(raw["videos"]),
-        "biography": bio,
-        "verified": _parse_bool(raw["verified"]) if raw["verified"] else False,
-        "sec_uid": raw["secUid"],
-        "comment_setting": _parse_int(raw["commentSetting"]),
-        "private_account": (
+    return _build_user_profile(
+        user_id=raw["user_id"],
+        username=raw["unique_id"],
+        nickname=raw["nickname"],
+        followers=_parse_int(raw["followers"]),
+        following=_parse_int(raw["following"]),
+        likes=_parse_int(raw["likes"]),
+        videos=_parse_int(raw["videos"]),
+        biography=bio,
+        verified=_parse_bool(raw["verified"]) if raw["verified"] else False,
+        sec_uid=raw["secUid"],
+        comment_setting=_parse_int(raw["commentSetting"]),
+        private_account=(
             _parse_bool(raw["privateAccount"]) if raw["privateAccount"] else False
         ),
-        "region": raw["region"],
-        "heart": _parse_int(raw["heart"]),
-        "digg_count": _parse_int(raw["diggCount"]),
-        "friend_count": _parse_int(raw["friendCount"]),
-        "profile_pic": profile_pic,
-        "profile_url": f"https://www.tiktok.com/@{raw['unique_id']}",
-        "social_links": social_links,
-    }
+        region=raw["region"],
+        heart=_parse_int(raw["heart"]),
+        digg_count=_parse_int(raw["diggCount"]),
+        friend_count=_parse_int(raw["friendCount"]),
+        profile_pic=profile_pic,
+        social_links=social_links,
+    )
+
+
+def get_user_info(identifier: str, by_id: bool = False) -> dict:
+    """Fetch TikTok user profile data by username or user ID."""
+    if identifier.startswith("@"):
+        identifier = identifier[1:]
+
+    if by_id:
+        return _get_user_info_via_scrape(identifier)
+
+    try:
+        return _get_user_info_via_tikwm(identifier)
+    except TikTokUserNotFoundError:
+        raise
+    except TikTokFetchError:
+        return _get_user_info_via_scrape(identifier)
 
 
 def _extract_social_links(html_content: str, bio: str) -> list[dict[str, str]]:
